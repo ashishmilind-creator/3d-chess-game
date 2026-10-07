@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>3D Motion Chess</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;font-family:Inter,system-ui,sans-serif;background:#080a0f;color:#fff}#app{width:100%;height:100%}.hud{position:absolute;z-index:3;top:18px;left:18px;right:18px;display:flex;justify-content:space-between;align-items:center;pointer-events:none}.hud h1{font-size:18px;letter-spacing:.22em;margin:0 0 5px;font-weight:800}.hud span{font-size:13px;color:#c8ccd5}.actions{display:flex;gap:9px;pointer-events:auto}.actions button{border:1px solid #ffffff26;background:#11151dcc;color:#fff;border-radius:10px;padding:10px 14px;cursor:pointer;font-weight:650;backdrop-filter:blur(12px)}.actions button:hover{background:#1c222d}#stage{width:100%;height:100%}@media(max-width:600px){.hud{top:12px;left:12px;right:12px;align-items:flex-start}.hud h1{font-size:14px}.actions button{padding:9px 10px;font-size:12px}}
+</style>
+</head>
+<body><div id="app"></div>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/","chess.js":"https://cdn.jsdelivr.net/npm/chess.js@1.4.0/+esm"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {Chess} from 'chess.js';
+const app=document.querySelector('#app');
+app.innerHTML='<div class="hud"><div><h1>3D MOTION CHESS</h1><span id="status">White to move</span></div><div class="actions"><button id="new">New Game</button><button id="flip">Flip Board</button></div></div><div id="stage"></div>';
+const stage=document.querySelector('#stage'),status=document.querySelector('#status');
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x080a0f);
+const camera=new THREE.PerspectiveCamera(45,innerWidth/innerHeight,.1,100);camera.position.set(8.5,9.5,10.5);
+const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight);renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;stage.appendChild(renderer.domElement);
+const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.minDistance=7;controls.maxDistance=18;controls.maxPolarAngle=Math.PI*.48;controls.target.set(0,0,0);
+scene.add(new THREE.HemisphereLight(0xcbd5e1,0x171717,2.2));const key=new THREE.DirectionalLight(0xffffff,3);key.position.set(5,12,6);key.castShadow=true;scene.add(key);
+const board=new THREE.Group();scene.add(board);const pieces=new THREE.Group();scene.add(pieces);const square=1.08,baseY=.22;let flipped=false,selected=null,busy=false;const game=new Chess();const meshes=new Map();
+const lightMat=new THREE.MeshStandardMaterial({color:0xd9c7a4,roughness:.78});const darkMat=new THREE.MeshStandardMaterial({color:0x5b3b2e,roughness:.72});
+for(let r=0;r<8;r++)for(let c=0;c<8;c++){const g=new THREE.BoxGeometry(square,.22,square),m=new THREE.Mesh(g,(r+c)%2?darkMat:lightMat);m.position.set((c-3.5)*square,0,(r-3.5)*square);m.receiveShadow=true;m.userData={type:'square',r,c};board.add(m)}
+const frame=new THREE.Mesh(new THREE.BoxGeometry(9.1,.42,9.1),new THREE.MeshStandardMaterial({color:0x16120f,metalness:.25,roughness:.5}));frame.position.y=-.22;frame.receiveShadow=true;scene.add(frame);
+function posFromSquare(s){const f=s.charCodeAt(0)-97,r=8-Number(s[1]);const c=flipped?7-f:f,rr=flipped?r:7-r;return new THREE.Vector3((c-3.5)*square,baseY,(rr-3.5)*square)}
+function pieceColor(type){return type===type.toUpperCase()?0xe7e1d5:0x17191d}
+function makePiece(type){const color=pieceColor(type),mat=new THREE.MeshStandardMaterial({color,metalness:.18,roughness:.28}),g=new THREE.Group();const body=new THREE.Mesh(new THREE.CylinderGeometry(.30,.38,.48,32),mat);body.position.y=.25;g.add(body);const collar=new THREE.Mesh(new THREE.CylinderGeometry(.27,.31,.12,32),mat);collar.position.y=.53;g.add(collar);const head={p:new THREE.Mesh(new THREE.SphereGeometry(.26,24,16),mat),n:new THREE.Mesh(new THREE.ConeGeometry(.30,.58,4),mat),b:new THREE.Mesh(new THREE.TorusGeometry(.27,.08,12,24),mat),r:new THREE.Mesh(new THREE.CylinderGeometry(.14,.24,.62,24),mat),q:new THREE.Mesh(new THREE.ConeGeometry(.25,.62,32),mat),k:new THREE.Mesh(new THREE.CylinderGeometry(.20,.29,.82,24),mat)};const t=type.toLowerCase();if(t==='p'){head.p.position.y=.72;g.add(head.p)}if(t==='n'){head.n.position.y=.84;head.n.rotation.z=.12;g.add(head.n)}if(t==='b'){head.b.position.y=.76;g.add(head.b)}if(t==='r'){head.r.position.y=.88;g.add(head.r)}if(t==='q'){head.q.position.y=.90;g.add(head.q)}if(t==='k'){head.k.position.y=1.0;g.add(head.k)}g.traverse(x=>{if(x.isMesh)x.castShadow=true});return g}
+function clearPieces(){pieces.clear();meshes.clear()}
+function draw(){clearPieces();for(const sq of game.board().flat()){if(!sq)continue;const mesh=makePiece(sq.type);mesh.position.copy(posFromSquare(sq.square));mesh.userData.square=sq.square;pieces.add(mesh);meshes.set(sq.square,mesh)}updateStatus();highlight(selected)}
+function updateStatus(){const t=game.turn()==='w'?'White':'Black';status.textContent=game.isCheckmate()?`${t} is checkmated — ${t==='White'?'Black':'White'} wins!`:game.isDraw()?'Draw':`${t} to move${game.isCheck()?' — CHECK!':''}`}
+function tween(mesh,to,duration=280){return new Promise(resolve=>{const from=mesh.position.clone(),start=performance.now();function f(now){const p=Math.min(1,(now-start)/duration),e=1-Math.pow(1-p,3);mesh.position.lerpVectors(from,to,e);mesh.position.y+=Math.sin(Math.PI*e)*.5;if(p<1)requestAnimationFrame(f);else{mesh.position.copy(to);resolve()}}requestAnimationFrame(f)})}
+async function move(from,to){if(busy)return;const m=meshes.get(from);if(!m)return;busy=true;const dest=posFromSquare(to),captured=meshes.get(to);if(captured){captured.scale.set(.01,.01,.01);await new Promise(r=>setTimeout(r,100));captured.removeFromParent()}const result=game.move({from,to,promotion:'q'});if(!result){busy=false;return}await tween(m,dest);m.userData.square=to;meshes.delete(from);meshes.set(to,m);selected=null;draw();busy=false}
+function highlight(sq){board.children.forEach(x=>{if(x.userData.type==='square'){let on=false;if(sq){const f=sq.charCodeAt(0)-97,r=8-Number(sq[1]);on=x.userData.r===r&&x.userData.c===f}x.material.emissive?.set(on?0x806000:0x000000);x.material.emissiveIntensity=on?.45:0}})}
+function pick(e){if(busy)return;const rect=renderer.domElement.getBoundingClientRect(),mouse=new THREE.Vector2((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1),ray=new THREE.Raycaster();ray.setFromCamera(mouse,camera);const hits=ray.intersectObjects(pieces.children,true);let obj=hits[0]?.object;while(obj&&obj.parent!==pieces)obj=obj.parent;if(obj?.userData.square){const sq=obj.userData.square,p=game.get(sq);if(selected){const legal=game.moves({square:selected,verbose:true}).some(x=>x.to===sq);if(legal){move(selected,sq);return}selected=null;highlight(null)}else if(p&&p.color===game.turn()){selected=sq;highlight(sq)}}}
+renderer.domElement.addEventListener('pointerdown',pick);document.querySelector('#new').onclick=()=>{game.reset();selected=null;draw()};document.querySelector('#flip').onclick=()=>{flipped=!flipped;draw()};addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});draw();(function animate(){requestAnimationFrame(animate);controls.update();renderer.render(scene,camera)})();
+</script></body></html>
